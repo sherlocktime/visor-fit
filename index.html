@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <!-- Vinculación del Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <link rel="icon" type="image/png" href="icono.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Visor Inteligente Pro (Fullscreen Absoluto)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body,
+        html {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: #fff;
+            font-family: sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #setup-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .btn-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 25px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .btn-secondary {
+            background-color: #28a745;
+        }
+
+        .separator {
+            font-size: 0.9rem;
+            color: #888;
+            margin: 5px 0;
+        }
+
+        #viewer-screen {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .image-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            top: 0;
+            left: 0;
+            overflow: hidden;
+        }
+
+        img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transform-origin: center center;
+            will-change: transform;
+        }
+
+        #info-overlay {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="setup-screen">
+        <h2>Visor de Pantalla Completa</h2>
+        <p>Las imágenes adaptarán su tamaño automáticamente para ocupar toda la pantalla al rotar.</p>
+
+        <div class="btn-container">
+            <input type="file" id="files-input" accept="image/*" multiple style="display: none;">
+            <button class="btn btn-secondary" onclick="document.getElementById('files-input').click()">Seleccionar
+                Imágenes</button>
+            <div class="separator">ó</div>
+            <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
+            <button class="btn" onclick="document.getElementById('folder-input').click()">Elegir Carpeta</button>
+        </div>
+    </div>
+
+    <div id="viewer-screen">
+        <div class="image-container">
+            <img id="current-img" src="" alt="Visor">
+        </div>
+        <div id="info-overlay">0 / 0</div>
+    </div>
+
+    <script>
+
+        // Registro del Service Worker obligatorio para PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker registrado con éxito'))
+                    .catch(err => console.error('Error al registrar SW', err));
+            });
+        }
+
+        let images = [];
+        let currentIndex = 0;
+
+        // Control de Zoom y Arrastre
+        let escalaActual = 1;
+        let escalaInicial = 1;
+        let distanciaInicial = 0;
+        let estaHaciendoZoom = false;
+
+        let estaArrastrando = false;
+        let posX = 0, posY = 0;
+        let startX = 0, startY = 0;
+        let estaRotada = false;
+
+        const folderInput = document.getElementById('folder-input');
+        const filesInput = document.getElementById('files-input');
+        const setupScreen = document.getElementById('setup-screen');
+        const viewerScreen = document.getElementById('viewer-screen');
+        const currentImg = document.getElementById('current-img');
+        const infoOverlay = document.getElementById('info-overlay');
+
+        function activarFullscreen() {
+            const elemento = document.documentElement;
+            if (elemento.requestFullscreen) elemento.requestFullscreen();
+            else if (elemento.webkitRequestFullscreen) elemento.webkitRequestFullscreen();
+        }
+
+        function procesarArchivos(listaArchivos) {
+            const files = Array.from(listaArchivos);
+            images = files.filter(file => file.type.startsWith('image/'))
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            if (images.length > 0) {
+                activarFullscreen();
+                setupScreen.style.display = 'none';
+                viewerScreen.style.display = 'block';
+                showImage(0);
+            } else {
+                alert('No se encontraron imágenes válidas.');
+            }
+        }
+
+        folderInput.addEventListener('change', (e) => procesarArchivos(e.target.files));
+        filesInput.addEventListener('change', (e) => procesarArchivos(e.target.files));
+
+        function ajustarOrientacion() {
+            if (!currentImg.src || images.length === 0) return;
+
+            const anchoPantalla = window.innerWidth;
+            const altoPantalla = window.innerHeight;
+
+            const telefonoEsHorizontal = anchoPantalla > altoPantalla;
+            const fotoEsHorizontal = currentImg.naturalWidth > currentImg.naturalHeight;
+
+            let transformacion = `translate(${posX}px, ${posY}px) `;
+
+            if (telefonoEsHorizontal !== fotoEsHorizontal) {
+                estaRotada = true;
+
+                const escalaX = anchoPantalla / currentImg.offsetHeight;
+                const escalaY = altoPantalla / currentImg.offsetWidth;
+                const escalaAutoFullscreen = Math.min(escalaX, escalaY);
+                const escalaFinal = escalaAutoFullscreen * escalaActual;
+
+                transformacion += `rotate(90deg) scale(${escalaFinal})`;
+            } else {
+                estaRotada = false;
+                transformacion += `scale(${escalaActual})`;
+            }
+
+            currentImg.style.transform = transformacion;
+        }
+
+        function resetearValoresZoom() {
+            escalaActual = 1;
+            posX = 0;
+            posY = 0;
+            estaArrastrando = false;
+            estaHaciendoZoom = false;
+            estaRotada = false;
+            ajustarOrientacion();
+        }
+
+        function showImage(index) {
+            if (index < 0 || index >= images.length) return;
+            currentIndex = index;
+
+            resetearValoresZoom();
+
+            const file = images[currentIndex];
+            const url = URL.createObjectURL(file);
+
+            currentImg.onload = function () {
+                URL.revokeObjectURL(url);
+                ajustarOrientacion();
+            };
+
+            currentImg.src = url;
+            infoOverlay.textContent = `${currentIndex + 1} / ${images.length}`;
+        }
+
+        window.addEventListener('resize', ajustarOrientacion);
+        window.addEventListener('orientationchange', ajustarOrientacion);
+
+        // --- CONTROLES DE TECLADO ---
+        document.addEventListener('keydown', (e) => {
+            if (images.length === 0) return;
+            if (e.key === 'ArrowRight') nextImage();
+            if (e.key === 'ArrowLeft') prevImage();
+        });
+
+        // --- GESTOS: TOUCHSTART ---
+        let touchStartX = 0;
+        let touchEndX = 0;
+        let touchStartY = 0;
+        let touchEndY = 0;
+        let ultimoTap = 0;
+
+        document.addEventListener('touchstart', e => {
+            if (e.touches.length === 2) {
+                estaHaciendoZoom = true;
+                estaArrastrando = false;
+                distanciaInicial = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                escalaInicial = escalaActual;
+            } else if (e.touches.length === 1) {
+                estaHaciendoZoom = false;
+                touchStartX = e.changedTouches[0].clientX;
+                touchStartY = e.changedTouches[0].clientY;
+
+                const ahora = new Date().getTime();
+
+                // --- COEXISTENCIA DE DOBLE TAP: ZOOM + FULLSCREEN ---
+                if (ahora - ultimoTap < 300 && ahora - ultimoTap > 0) {
+                    e.preventDefault();
+
+                    // 1. Resetea el zoom por completo
+                    resetearValoresZoom();
+
+                    // 2. Si por algún gesto del sistema se salió del Fullscreen, lo fuerza de nuevo
+                    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                        activarFullscreen();
+                    }
+
+                    ultimoTap = 0;
+                    return;
+                }
+                ultimoTap = ahora;
+
+                if (escalaActual > 1) {
+                    estaArrastrando = true;
+                    startX = touchStartX - posX;
+                    startY = touchStartY - posY;
+                }
+            }
+        }, { passive: false });
+
+        // --- GESTOS: TOUCHMOVE ---
+        document.addEventListener('touchmove', e => {
+            if (estaHaciendoZoom && e.touches.length === 2) {
+                e.preventDefault();
+                const distanciaActual = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                let factor = distanciaActual / distanciaInicial;
+                escalaActual = Math.max(1, Math.min(escalaInicial * factor, 4));
+
+                if (escalaActual === 1) { posX = 0; posY = 0; }
+                ajustarOrientacion();
+            }
+            else if (estaArrastrando && e.touches.length === 1) {
+                e.preventDefault();
+                posX = e.touches[0].clientX - startX;
+                posY = e.touches[0].clientY - startY;
+                ajustarOrientacion();
+            }
+        }, { passive: false });
+
+        // --- GESTOS: TOUCHEND ---
+        document.addEventListener('touchend', e => {
+            if (estaHaciendoZoom) {
+                if (e.touches.length < 2) estaHaciendoZoom = false;
+                return;
+            }
+
+            if (estaArrastrando) {
+                if (e.touches.length === 0) estaArrastrando = false;
+                return;
+            }
+
+            if (escalaActual > 1) return;
+
+            touchEndX = e.changedTouches[0].clientX;
+            touchEndY = e.changedTouches[0].clientY;
+
+            evaluarInteraccion();
+        });
+
+        function evaluarInteraccion() {
+            const thresholdSwipe = 40;
+            const deltaX = touchStartX - touchEndX;
+            const deltaY = touchStartY - touchEndY;
+
+            if (Math.abs(deltaX) > thresholdSwipe || Math.abs(deltaY) > thresholdSwipe) {
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    if (deltaX > thresholdSwipe) nextImage();
+                    else if (deltaX < -thresholdSwipe) prevImage();
+                } else {
+                    if (deltaY > thresholdSwipe) nextImage();
+                    else if (deltaY < -thresholdSwipe) prevImage();
+                }
+                return;
+            }
+
+            const anchoTotal = window.innerWidth;
+            const tercioIzquierdo = anchoTotal / 3;
+            const tercioDerecho = (anchoTotal / 3) * 2;
+
+            if (touchStartX < tercioIzquierdo) prevImage();
+            else if (touchStartX > tercioDerecho) nextImage();
+        }
+
+        function nextImage() {
+            if (images.length === 0) return;
+            if (currentIndex < images.length - 1) {
+                showImage(currentIndex + 1);
+            } else {
+                showImage(0);
+            }
+        }
+
+        function prevImage() {
+            if (images.length === 0) return;
+            if (currentIndex > 0) {
+                showImage(currentIndex - 1);
+            } else {
+                showImage(images.length - 1);
+            }
+        }
+    </script>
+</body>
+
+</html>

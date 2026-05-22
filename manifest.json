@@ -1,0 +1,19 @@
+{
+  "name": "Visor Inteligente Fit",
+  "short_name": "VisorFit",
+  "description": "Visor de imágenes fullscreen con adaptación de orientación inteligente.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icono.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+ ]
+}
