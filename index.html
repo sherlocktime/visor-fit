@@ -2,111 +2,27 @@
 <html lang="es">
 
 <head>
-    <!-- Vinculación del Manifest -->
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
-    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="icons/icon-192.png" />
-    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" type="image/png" href="icono.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Visor-Fit</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body,
-        html {
-            width: 100%;
-            height: 100%;
-            background-color: #000;
-            color: #fff;
-            font-family: sans-serif;
-            overflow: hidden;
-            touch-action: none;
-        }
-
-        #setup-screen {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            padding: 20px;
-            text-align: center;
-        }
-
-        .btn-container {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-top: 25px;
-            width: 100%;
-            max-width: 320px;
-        }
-
-        .btn {
-            background-color: #007bff;
-            color: white;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            cursor: pointer;
-            width: 100%;
-        }
-
-        .btn-secondary {
-            background-color: #28a745;
-        }
-
-        .separator {
-            font-size: 0.9rem;
-            color: #888;
-            margin: 5px 0;
-        }
-
-        #viewer-screen {
-            display: none;
-            width: 100%;
-            height: 100%;
-            position: relative;
-        }
-
-        .image-container {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: absolute;
-            top: 0;
-            left: 0;
-            overflow: hidden;
-        }
-
-        img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            transform-origin: center center;
-            will-change: transform;
-        }
-
-        #info-overlay {
-            position: absolute;
-            bottom: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.6);
-            padding: 5px 15px;
-            border-radius: 15px;
-            font-size: 0.9rem;
-            pointer-events: none;
-            z-index: 10;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; background-color: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+        #setup-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center; }
+        .btn-container { display: flex; flex-direction: column; gap: 15px; margin-top: 25px; width: 100%; max-width: 320px; }
+        .btn { background-color: #007bff; color: white; padding: 15px 30px; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; width: 100%; -webkit-tap-highlight-color: transparent; }
+        .btn:active { opacity: 0.7; }
+        .btn-secondary { background-color: #28a745; }
+        .separator { font-size: 0.9rem; color: #888; margin: 5px 0; }
+        #viewer-screen { display: none; width: 100%; height: 100%; position: relative; }
+        .image-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: absolute; top: 0; left: 0; overflow: hidden; }
+        img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center center; will-change: transform; }
+        #info-overlay { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); padding: 5px 15px; 
+            border-radius: 15px; font-size: 0.9rem; pointer-events: none; z-index: 10; transition: all 0.3s ease; }
+        #info-overlay.rotado { bottom: auto; left: 15px; top: 50%; transform: translateY(-50%) rotate(90deg); transform-origin: center center; }
     </style>
 </head>
 
@@ -134,16 +50,6 @@
     </div>
 
     <script>
-
-        // Registro del Service Worker obligatorio para PWA
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('Service Worker registrado con éxito'))
-                    .catch(err => console.error('Error al registrar SW', err));
-            });
-        }
-
         let images = [];
         let currentIndex = 0;
 
@@ -209,9 +115,15 @@
                 const escalaFinal = escalaAutoFullscreen * escalaActual;
 
                 transformacion += `rotate(90deg) scale(${escalaFinal})`;
+                
+                // Agregamos la clase para acomodar el indicador de foto
+                infoOverlay.classList.add('rotado');
             } else {
                 estaRotada = false;
                 transformacion += `scale(${escalaActual})`;
+                
+                // Removemos la clase si vuelve a su estado normal
+                infoOverlay.classList.remove('rotado');
             }
 
             currentImg.style.transform = transformacion;
@@ -278,18 +190,12 @@
 
                 const ahora = new Date().getTime();
 
-                // --- COEXISTENCIA DE DOBLE TAP: ZOOM + FULLSCREEN ---
                 if (ahora - ultimoTap < 300 && ahora - ultimoTap > 0) {
                     e.preventDefault();
-
-                    // 1. Resetea el zoom por completo
                     resetearValoresZoom();
-
-                    // 2. Si por algún gesto del sistema se salió del Fullscreen, lo fuerza de nuevo
                     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
                         activarFullscreen();
                     }
-
                     ultimoTap = 0;
                     return;
                 }
