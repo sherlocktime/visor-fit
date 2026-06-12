@@ -10,19 +10,17 @@
     <title>Visor-Fit</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body, html { width: 100%; height: 100%; background-color: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; user-select: none; -webkit-select: none; }
+        body, html { width: 100%; height: 100%; background-color: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
         #setup-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center; }
         .btn-container { display: flex; flex-direction: column; gap: 15px; margin-top: 25px; width: 100%; max-width: 320px; }
-        .btn { background-color: #007bff; color: white; padding: 15px 30px; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; width: 100%; -webkit-tap-highlight-color: transparent; }
-        .btn:active { opacity: 0.7; }
+        .btn { background-color: #007bff; color: white; padding: 15px 30px; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; width: 100%; }
         .btn-secondary { background-color: #28a745; }
         .separator { font-size: 0.9rem; color: #888; margin: 5px 0; }
         #viewer-screen { display: none; width: 100%; height: 100%; position: relative; }
         .image-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: absolute; top: 0; left: 0; overflow: hidden; }
         img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center center; will-change: transform; }
-        #info-overlay { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); padding: 5px 15px; border-radius: 15px; 
-            font-size: 0.9rem; pointer-events: none; z-index: 10; transition: transform 0.2s ease, left 0.2s ease, bottom 0.2s ease; }
-        #info-overlay.rotado { bottom: 50%; left: auto; right: 15px; transform: translateY(50%) rotate(-90deg); }
+        #info-overlay { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); padding: 5px 15px; border-radius: 15px; font-size: 0.9rem; pointer-events: none; z-index: 10; transform-origin: center center; transition: all 0.2s ease; }
+        #info-overlay.rotado { bottom: 50%; left: auto; right: 15px; transform: translateY(50%) rotate(90deg); }
     </style>
 </head>
 
@@ -50,6 +48,7 @@
     </div>
 
     <script>
+
         let images = [];
         let currentIndex = 0;
 
@@ -115,14 +114,10 @@
                 const escalaFinal = escalaAutoFullscreen * escalaActual;
 
                 transformacion += `rotate(90deg) scale(${escalaFinal})`;
-                
-                // Activamos la posición horizontal para la etiqueta
                 infoOverlay.classList.add('rotado');
             } else {
                 estaRotada = false;
                 transformacion += `scale(${escalaActual})`;
-                
-                // Volvemos a la posición vertical estándar
                 infoOverlay.classList.remove('rotado');
             }
 
@@ -190,12 +185,18 @@
 
                 const ahora = new Date().getTime();
 
+                // --- COEXISTENCIA DE DOBLE TAP: ZOOM + FULLSCREEN ---
                 if (ahora - ultimoTap < 300 && ahora - ultimoTap > 0) {
                     e.preventDefault();
+
+                    // 1. Resetea el zoom por completo
                     resetearValoresZoom();
+
+                    // 2. Si por algún gesto del sistema se salió del Fullscreen, lo fuerza de nuevo
                     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
                         activarFullscreen();
                     }
+
                     ultimoTap = 0;
                     return;
                 }
